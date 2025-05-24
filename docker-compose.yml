@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  vault-server:
+    image: hashicorp/vault:latest
+    container_name: vault-server
+    ports:
+      - "8200:8200"
+    environment:
+      - VAULT_DEV_ROOT_TOKEN_ID=root
+      - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200
+      - VAULT_ADDR=http://0.0.0.0:8200
+    volumes:
+      - ./scripts:/scripts
+      - ./certs:/certs
+    cap_add:
+      - IPC_LOCK
+    command: server -dev -dev-root-token-id=root
+    networks:
+      - vault-network
+
+  vault-agent:
+    image: hashicorp/vault:latest
+    container_name: vault-agent
+    hostname: my-app-server
+    depends_on:
+      - vault-server
+    volumes:
+      - ./config/vault-agent.hcl:/vault/config/vault-agent.hcl:ro
+      - ./templates:/vault/templates:ro
+      - ./certs:/vault/certs
+    environment:
+      - VAULT_ADDR=http://vault-server:8200
+      - VAULT_TOKEN=root
+      - HOSTNAME=${HOSTNAME:-my-app-server}
+      - IP_SANS=${IP_SANS:-127.0.0.1,192.168.1.100}
+      - ALT_NAMES=${ALT_NAMES:-localhost,*.example.com}
+    entrypoint: sh
+    command: -c "sleep 10 && echo 'root' > /vault/token && vault agent -config=/vault/config/vault-agent.hcl"
+    networks:
+      - vault-network
+
+networks:
+  vault-network:
+    driver: bridge
+
+volumes:
+  vault-data:
+  vault-agent-data:
